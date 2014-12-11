@@ -14,7 +14,7 @@
 ;; No-op implementation if one is not defined.
 (extend-protocol Lifecycle
   #+clj java.lang.Object
-  #+cljs js/Object
+  #+cljs default
   (start [this]
     this)
   (stop [this]
