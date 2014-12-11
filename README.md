@@ -1,4 +1,7 @@
-# component
+# component-cljx
+
+A cljx fork of Stuart Sierra's [Component](https://github.com/stuartsierra/component) library.
+
 
 'Component' is a tiny Clojure framework for managing the lifecycle of
 software components which have runtime state.

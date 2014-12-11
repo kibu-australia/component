@@ -1,12 +1,15 @@
 (ns com.stuartsierra.component-test
-  (:require [clojure.test :refer (deftest is are)]
+  #+cljs (:require-macros [cemerick.cljs.test :refer [deftest is are]])
+  (:require #+clj [clojure.test :refer [deftest is are]]
+            #+cljs [cemerick.cljs.test]
             [clojure.set :refer (map-invert)]
             [com.stuartsierra.component :as component]))
 
 (def ^:dynamic *log* nil)
 
 (defn- log [& args]
-  (when (thread-bound? #'*log*)
+  (when #+clj (thread-bound? #'*log*)
+        #+cljs true
     (set! *log* (conj *log* args))))
 
 (defn- ordering
@@ -38,7 +41,8 @@
     (assoc this ::started? false)))
 
 (defn component-a []
-  (->ComponentA (rand-int Integer/MAX_VALUE)))
+  (->ComponentA (rand-int #+clj  Integer/MAX_VALUE 
+                          #+cljs (.-MAX_VALUE js/Number))))
 
 (defrecord ComponentB [state a]
   component/Lifecycle
@@ -53,7 +57,8 @@
 
 (defn component-b []
   (component/using
-    (map->ComponentB {:state (rand-int Integer/MAX_VALUE)})
+   (map->ComponentB {:state (rand-int #+clj  Integer/MAX_VALUE
+                                      #+cljs (.-MAX_VALUE js/Number))})
     [:a]))
 
 (defrecord ComponentC [state a b]
@@ -71,7 +76,8 @@
 
 (defn component-c []
   (component/using
-    (map->ComponentC {:state (rand-int Integer/MAX_VALUE)})
+   (map->ComponentC {:state (rand-int #+clj  Integer/MAX_VALUE
+                                      #+cljs (.-MAX_VALUE js/Number))})
     [:a :b]))
 
 (defrecord ComponentD [state my-c b]
@@ -88,7 +94,8 @@
     (assoc this ::started? false)))
 
 (defn component-d []
-  (map->ComponentD {:state (rand-int Integer/MAX_VALUE)}))
+  (map->ComponentD {:state (rand-int #+clj  Integer/MAX_VALUE
+                                     #+cljs (.-MAX_VALUE js/Number))}))
 
 (defrecord ComponentE [state]
   component/Lifecycle
@@ -100,7 +107,8 @@
     (assoc this ::started? false)))
 
 (defn component-e []
-  (map->ComponentE {:state (rand-int Integer/MAX_VALUE)}))
+  (map->ComponentE {:state (rand-int #+clj  Integer/MAX_VALUE
+                                     #+cljs (.-MAX_VALUE js/Number))}))
 
 (defrecord System1 [d a e c b]  ; deliberately scrambled order
   component/Lifecycle
@@ -120,13 +128,10 @@
                        :my-c :c})
                  :e (component-e)}))
 
-(defmacro with-log [& body]
-  `(binding [*log* []]
-     ~@body
-     *log*))
-
 (deftest components-start-in-order
-  (let [log (with-log (component/start (system-1)))]
+  (let [log (binding [*log* []] 
+              (component/start (system-1))
+              *log*)]
     (are [k1 k2] (before? log k1 k2)
          'ComponentA.start 'ComponentB.start
          'ComponentA.start 'ComponentC.start
@@ -170,7 +175,7 @@
   ([error]
      (try (component/start
            (assoc (system-1) :c (error-start-c error)))
-          (catch Exception e e))))
+          (catch #+clj Exception  #+cljs js/Error e e))))
 
 (deftest error-thrown-with-partial-system
   (let [ex (setup-error)]
@@ -184,7 +189,8 @@
 (deftest error-thrown-with-cause
   (let [error (ex-info "Boom!" {})
         ex (setup-error error)]
-    (is (identical? error (.getCause ^Exception ex)))))
+    (is (identical? error #+clj  (.getCause ex)
+                          #+cljs (.-cause ex)))))
 
 (deftest error-is-from-component
   (let [error (ex-info "Boom!" {})
@@ -195,20 +201,22 @@
   (is (not (component/ex-component? (ex-info "Boom!" {})))))
 
 (deftest remove-components-from-error
-  (let [error (ex-info (str (rand-int Integer/MAX_VALUE)) {})
-        ^Exception ex (setup-error error)
-        ^Exception ex-without (component/ex-without-components ex)]
+  (let [error (ex-info (str (rand-int #+clj  Integer/MAX_VALUE
+                                      #+cljs (.-MAX_VALUE js/Number))) {})
+        ex (setup-error error)
+        ex-without (component/ex-without-components ex)]
     (is (contains? (ex-data ex) :component))
     (is (contains? (ex-data ex) :system))
     (is (not (contains? (ex-data ex-without) :component)))
     (is (not (contains? (ex-data ex-without) :system)))
-    (is (= (.getMessage ex)
-           (.getMessage ex-without)))
-    (is (= (.getCause ex)
-           (.getCause ex-without)))
-    (is (java.util.Arrays/equals
-         (.getStackTrace ex)
-         (.getStackTrace ex-without)))))
+    (is (= #+clj  (.getMessage ex)
+           #+cljs (ex-message ex)
+           #+clj  (.getMessage ex-without)
+           #+cljs (ex-message ex-without)))
+    (is (= #+clj  (.getCause ex)
+           #+cljs (.-cause ex)
+           #+clj  (.getCause ex-without)
+           #+cljs (.-cause ex-without)))))
 
 (defrecord System2b [one]
   component/Lifecycle

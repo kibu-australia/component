@@ -13,7 +13,8 @@
 
 ;; No-op implementation if one is not defined.
 (extend-protocol Lifecycle
-  java.lang.Object
+  #+clj java.lang.Object
+  #+cljs js/Object
   (start [this]
     this)
   (stop [this]
@@ -80,7 +81,8 @@
   (let [dependency (get system system-key)]
     (when-not dependency
       (throw (ex-info (str "Missing dependency " dependency-key
-                           " of " (.getName (class component))
+                           " of " #+clj  (.getName (class component))
+                                  #+cljs (str (type component))
                            " expected in system at " system-key)
                       {:reason ::missing-dependency
                        :system-key system-key
@@ -96,9 +98,12 @@
 
 (defn- try-action [component system key f args]
   (try (apply f component args)
-       (catch Throwable t
+       (catch #+clj Throwable 
+              #+cljs js/Error 
+              t
          (throw (ex-info (str "Error in component " key
-                              " in system " (.getName (class system))
+                              " in system " #+clj  (.getName (class system))
+                                            #+cljs (str (type system))
                               " calling " f)
                          {:reason ::component-function-threw-exception
                           :function f
@@ -148,7 +153,8 @@
   ([system]
      (start-system system (keys system)))
   ([system component-keys]
-     (update-system system component-keys #'start)))
+     (update-system system component-keys #+clj #'start
+                                          #+cljs start)))
 
 (defn stop-system
   "Recursively stops components in the system, in reverse dependency
@@ -158,7 +164,8 @@
   ([system]
      (stop-system system (keys system)))
   ([system component-keys]
-     (update-system-reverse system component-keys #'stop)))
+     (update-system-reverse system component-keys #+clj #'stop
+                                                  #+cljs stop)))
 
 (defrecord SystemMap []
   Lifecycle
@@ -166,10 +173,6 @@
     (start-system system))
   (stop [system]
     (stop-system system)))
-
-(defmethod clojure.core/print-method SystemMap
-  [system ^java.io.Writer writer]
-  (.write writer "#<SystemMap>"))
 
 (defn system-map
   "Returns a system constructed of key/value pairs. The system has
@@ -184,7 +187,8 @@
   [& keyvals]
   ;; array-map doesn't check argument length (CLJ-1319)
   (when-not (even? (count keyvals))
-    (throw (IllegalArgumentException.
+    (throw (#+clj IllegalArgumentException.
+            #+cljs js/Error.
             "system-map requires an even number of arguments")))
   (map->SystemMap (apply array-map keyvals)))
 
@@ -205,16 +209,18 @@
   throwable. If the throwable was not created by this namespace,
   returns it unchanged. Use this when you want to catch and rethrow
   exceptions without including the full component or system."
-  [^Throwable throwable]
+  [throwable]
   (if (ex-component? throwable)
-    (let [^Throwable ex
-          (ex-info (.getMessage throwable)
+    (let [ex
+          (ex-info #+clj  (.getMessage throwable)
+                   #+cljs (ex-message throwable)
                    (dissoc (ex-data throwable) :component :system)
-                   (.getCause throwable))]
+                   #+clj  (.getCause throwable)
+                   #+cljs (ex-cause throwable))]
       ;; .getStackTrace should never be null, but .setStackTrace
       ;; doesn't allow null, so we'll be careful
-      (when-let [stacktrace (.getStackTrace throwable)]
-        (.setStackTrace ex stacktrace))
+      #+clj (when-let [stacktrace (.getStackTrace throwable)]
+              (.setStackTrace ex stacktrace))
       ex)
     throwable))
 
